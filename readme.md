@@ -1,8 +1,8 @@
 # Clipboard++
 
-## reason: I wanted an application that I could use that kept an in memory cache of mutiple clipboard items. That way if I accidently copied over some data I was working on, I could go back to the original version
+reason: I wanted an application that I could use that kept an in memory cache of mutiple clipboard items. That way if I accidently copied over some data I was working on, I could go back to the original version
 
-### future enhancements
+## future enhancements
 * Be able to save cliped items
 * store / retrieve clip items on drive for reboots
 * In memory compression on text items
@@ -15,9 +15,13 @@
 * winform with better display of cache items (optional)
 * have a better icon then "default"
 
-# Technology used
+## Learnings
+
+### New
 * low level pointers
 * dll import
+
+### Existing / reinforce
 * sha1 hashing
 * binary serialization
 * winform development
