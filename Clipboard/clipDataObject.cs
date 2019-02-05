@@ -7,37 +7,20 @@ using System.Windows.Forms;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.IO;
 using System.Security.Cryptography;
+using System.IO.Compression;
 
 namespace Clipboard
 {
+
+
+
     class ClipDataObject
     {
         #region Global Variables
 
-        private string[] SupportedTypes = new string[]
-    {
-            DataFormats.Bitmap,
-            DataFormats.CommaSeparatedValue,
-            DataFormats.Dib,
-            DataFormats.Dif,
-            DataFormats.EnhancedMetafile,
-            DataFormats.FileDrop,
-            DataFormats.Html,
-            DataFormats.Locale,
-            DataFormats.MetafilePict,
-            DataFormats.OemText,
-            DataFormats.Palette,
-            DataFormats.PenData,
-            DataFormats.Riff,
-            DataFormats.Rtf,
-            DataFormats.Serializable,
-            DataFormats.StringFormat,
-            DataFormats.SymbolicLink,
-            DataFormats.Text,
-            DataFormats.Tiff,
-            DataFormats.UnicodeText,
-            DataFormats.WaveAudio
-    };
+        private static readonly string[] SupportedTypes = { DataFormats.Bitmap, DataFormats.CommaSeparatedValue, DataFormats.Dib, DataFormats.EnhancedMetafile, DataFormats.Html, DataFormats.OemText, DataFormats.Palette, DataFormats.Rtf, DataFormats.Serializable, DataFormats.StringFormat, DataFormats.Text, DataFormats.UnicodeText };
+        private static readonly string[] imageFormats = { DataFormats.Bitmap, DataFormats.Dib };
+        private static readonly string[] stringFormats = { DataFormats.CommaSeparatedValue, DataFormats.EnhancedMetafile, DataFormats.Html, DataFormats.OemText, DataFormats.Rtf, DataFormats.Serializable, DataFormats.StringFormat, DataFormats.Text, DataFormats.UnicodeText };
 
         #endregion
 
@@ -48,17 +31,35 @@ namespace Clipboard
         /// </summary>
         public string Key { get; }
 
+
+        private readonly byte[] _data;
         /// <summary>
         /// The raw data object
         /// </summary>
-        public object Data { get; }
+        public object Data
+        {
+            get
+            {
+                DataObject dataObject = new DataObject();
+
+                Dictionary<string, object> CachedItem = (Dictionary<string, object>)DecompressObject(_data);
+                foreach (var item in CachedItem)
+                {
+                    dataObject.SetData(item.Key, item.Value);
+                }
+                return dataObject;
+            }
+        }
 
         /// <summary>
         /// the format of the raw data object
         /// </summary>
-        public string Type { get; }
+        private string Type { get; }
 
         public ToolStripLabel Label { get; }
+
+        public long _fileSize;
+        public long FileSize { get { return _fileSize; } }
         #endregion
 
         #region Constructor
@@ -69,9 +70,8 @@ namespace Clipboard
         /// <param name="item"></param>
         public ClipDataObject(IDataObject item)
         {
-            Type = GetMainFormat(item.GetFormats());
-            Data = item.GetData(Type);
-            Key = GenerateKey(Data);
+            _data = CompressObject(getMainObjectDict(item));
+            Key = GenerateKey(_data);
             Label = GenerateLabel((DataObject)item);
         }
 
@@ -85,7 +85,10 @@ namespace Clipboard
             {
                 using (SHA1 sha1Hash = SHA1.Create())
                 {
-                    byte[] bytes = sha1Hash.ComputeHash(ObjectToByteArray(o));
+
+                    byte[] bytes = ObjectToByteArray(o);
+                    _fileSize = bytes.Length;
+                    bytes = sha1Hash.ComputeHash(bytes);
                     System.Text.StringBuilder builder = new System.Text.StringBuilder();
                     for (int i = 0; i < bytes.Length; i++)
                     {
@@ -108,9 +111,66 @@ namespace Clipboard
             }
         }
 
-        private string GetMainFormat(string[] types)
+        private static object StreamToObject(Stream ar)
         {
-            return (from string s in types where SupportedTypes.Contains(s) select s).First();
+            BinaryFormatter bf = new BinaryFormatter();
+            return bf.Deserialize(ar);
+        }
+
+
+        private static byte[] CompressObject(object o)
+        {
+            using (MemoryStream compressedItem = new MemoryStream())
+            {
+                using (DeflateStream Compressor = new DeflateStream(compressedItem, CompressionMode.Compress))
+                {
+                    (new MemoryStream(ObjectToByteArray(o))).CopyTo(Compressor);
+                }
+                return compressedItem.ToArray();
+            }
+        }
+
+        private static object DecompressObject(object o)
+        {
+            var item = new MemoryStream();
+            using (DeflateStream Decompressor = new DeflateStream(new MemoryStream((byte[])o), CompressionMode.Decompress))
+            {
+                Decompressor.CopyTo(item);
+            }
+            item.Position = 0;
+            return StreamToObject(item);
+
+        }
+
+
+        private static byte[] CompressImage(System.Drawing.Image o)
+        {
+            byte[] result = null;
+            using (MemoryStream stream = new MemoryStream())
+            {
+                o.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+                result = stream.ToArray();
+            }
+            return result;
+        }
+
+        private static System.Drawing.Image DecompressImage(object o) { return System.Drawing.Image.FromStream(new MemoryStream((byte[])o)); }
+
+
+
+
+        private Dictionary<string, object> getMainObjectDict(IDataObject data)
+        {
+
+            Dictionary<string, object> response = new Dictionary<string, object>();
+            foreach (string s in data.GetFormats())
+            {
+                if (data.GetDataPresent(s, false) && data.GetData(s, false) != null)
+                {
+                    response.Add(s, data.GetData(s));
+                }
+            }
+            return response;
         }
 
         private ToolStripLabel GenerateLabel(DataObject obj)
@@ -124,9 +184,8 @@ namespace Clipboard
             }
             else if (obj.ContainsImage())
             {
-                return new ToolStripLabel(Type + " " + DateTime.Now.ToString("hhMMss"), obj.GetImage().GetThumbnailImage(32, 32, () => false, IntPtr.Zero), false)
-                {
-                };
+                System.Drawing.Image thumb = obj.GetImage().GetThumbnailImage(16, 16, () => false, IntPtr.Zero);
+                return new ToolStripLabel(Type + " " + DateTime.Now.ToString("hhMMss"), thumb, false);
             }
             else
             {

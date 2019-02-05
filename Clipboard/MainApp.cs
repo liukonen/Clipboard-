@@ -65,11 +65,9 @@ namespace Clipboard
 
         private void AddItemToCache(IDataObject obj)
         {
-
             ClipDataObject dataObject = new ClipDataObject(obj);
-
             CacheHandler.Insert(0, dataObject);
-            if (CacheHandler.Count > TotalCount) { CacheHandler.Remove(CacheHandler.Last()); }
+            if (CacheHandler.Count > TotalCount) { CacheHandler.Remove(CacheHandler.Last()); GC.Collect(); }
 
         }
 
@@ -96,8 +94,8 @@ namespace Clipboard
             var X = (from y in CacheHandler
                      where y.Key == key
                      select y).First();
-
-            System.Windows.Forms.Clipboard.SetData(X.Type, X.Data);
+            System.Windows.Forms.Clipboard.SetDataObject(X.Data);
+            //System.Windows.Forms.Clipboard.SetData(X.Type, X.Data);
             Manager.Start();
         }
 
