@@ -18,13 +18,14 @@ reason: I wanted an application that I could use that kept an in memory cache of
   * Save support
 * have a better icon then "default"
 * experiment with 3rd party serialization engines for better performance and or compression
-* pause / resume button
+* ~~pause / resume button~~
 
 ## Learnings
 
 ### New
 * low level pointers
 * dll import
+* In Memory image formating
 
 ### Existing / reinforce
 * sha1 hashing
