@@ -52,10 +52,35 @@ namespace Clipboard
             //TODO: implement new save functionality//{ value.Items.Add(new ToolStripMenuItem("Save", null, SaveCachedItems())); }
             value.Items.Add(new ToolStripSeparator());
             //TODO: Implement Settings functionality
+   
+            value.Items.Add(SettingsMenu());
             value.Items.Add(new ToolStripLabel("About", null, false, MenuAboutClick));
             value.Items.Add(new ToolStripLabel("Exit", null, false, MenuExitClick));
             return value;
 
+        }
+
+
+        private ToolStripMenuItem SettingsMenu()
+        {
+            ToolStripMenuItem SettingsMenuItem = new ToolStripMenuItem() { Text = "Settings" };
+
+            ToolStripButton PauseResume = new ToolStripButton("Pause", null, PauseResume_ClickEvent);
+            SettingsMenuItem.DropDownItems.Add(PauseResume);
+
+            return SettingsMenuItem;
+
+        }
+
+        private void PauseResume_ClickEvent(object sender, EventArgs e)
+        {
+            ToolStripButton current = ((ToolStripButton)sender);
+            if (current.Text == "Pause")
+            {
+                Manager.Stop();
+                current.Text = "Resume";
+            }
+            else { Manager.Start(); current.Text = "Pause"; }
         }
 
 
