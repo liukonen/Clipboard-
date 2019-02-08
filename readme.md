@@ -7,7 +7,7 @@ reason: I wanted an application that I could use that kept an in memory cache of
 * store / retrieve clip items on drive for reboots
   * cryptography on stored items
 * ~~In memory compression on text items~~
-* potential compression on images... need to research what is actually saved on clip
+* ~~potential compression on images... need to research what is actually saved on clip~~
 * options form, to configure compression, max number of items, and cryptography
 * pre defined hotkeys for cached items
 * Lock particular cache items to list
