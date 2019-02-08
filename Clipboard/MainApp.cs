@@ -21,8 +21,6 @@ namespace Clipboard
 
         #region "Event Handles"
 
-
-
         public MainApp()
         {
             notifyIcon = new NotifyIcon
@@ -71,9 +69,6 @@ namespace Clipboard
 
         }
 
-
-
-
         private ToolStripItem[] CachedItems()
         {
             List<ToolStripItem> output = new List<ToolStripItem>();
@@ -94,8 +89,9 @@ namespace Clipboard
             var X = (from y in CacheHandler
                      where y.Key == key
                      select y).First();
-            System.Windows.Forms.Clipboard.SetDataObject(X.Data);
-            //System.Windows.Forms.Clipboard.SetData(X.Type, X.Data);
+            System.Windows.Forms.Clipboard.Clear();
+
+            System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject);
             Manager.Start();
         }
 

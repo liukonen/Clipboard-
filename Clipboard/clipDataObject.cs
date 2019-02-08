@@ -1,27 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.IO;
-using System.Security.Cryptography;
 using System.IO.Compression;
 
 namespace Clipboard
 {
-
-
-
-    class ClipDataObject
+    class ClipDataObject : IDisposable
     {
         #region Global Variables
 
-        private static readonly string[] SupportedTypes = { DataFormats.Bitmap, DataFormats.CommaSeparatedValue, DataFormats.Dib, DataFormats.EnhancedMetafile, DataFormats.Html, DataFormats.OemText, DataFormats.Palette, DataFormats.Rtf, DataFormats.Serializable, DataFormats.StringFormat, DataFormats.Text, DataFormats.UnicodeText };
-        private static readonly string[] imageFormats = { DataFormats.Bitmap, DataFormats.Dib };
-        private static readonly string[] stringFormats = { DataFormats.CommaSeparatedValue, DataFormats.EnhancedMetafile, DataFormats.Html, DataFormats.OemText, DataFormats.Rtf, DataFormats.Serializable, DataFormats.StringFormat, DataFormats.Text, DataFormats.UnicodeText };
+        private Dictionary<int, byte[]> extractedItems = new Dictionary<int, byte[]>();
+        private Dictionary<string, int> ExtractedTypeLookupTable = new Dictionary<string, int>();
+        private Dictionary<int, DataType> CompresionTypeLookup = new Dictionary<int, DataType>();
+        
+        #endregion
 
+        #region Enums
+        private enum DataType : byte { Text = 0, Image = 1, MemoryStream = 2, Other = 3 }
         #endregion
 
         #region Properties
@@ -31,35 +29,25 @@ namespace Clipboard
         /// </summary>
         public string Key { get; }
 
-
-        private readonly byte[] _data;
-        /// <summary>
-        /// The raw data object
-        /// </summary>
-        public object Data
+        public DataObject ClipboardObject
         {
             get
             {
-                DataObject dataObject = new DataObject();
-
-                Dictionary<string, object> CachedItem = (Dictionary<string, object>)DecompressObject(_data);
-                foreach (var item in CachedItem)
+                DataObject data = new DataObject();
+                foreach (string item in Formats)
                 {
-                    dataObject.SetData(item.Key, item.Value);
+                    data.SetData(item, GetData(item));
                 }
-                return dataObject;
+                return data;
             }
         }
 
-        /// <summary>
-        /// the format of the raw data object
-        /// </summary>
-        private string Type { get; }
-
         public ToolStripLabel Label { get; }
 
-        public long _fileSize;
-        public long FileSize { get { return _fileSize; } }
+        public long FileSize { get { try { return (from X in extractedItems.Values select X.Length).Sum(); } catch { } return int.MaxValue; } }
+
+        public string[] Formats { get { return ExtractedTypeLookupTable.Keys.ToArray(); } }
+
         #endregion
 
         #region Constructor
@@ -70,53 +58,96 @@ namespace Clipboard
         /// <param name="item"></param>
         public ClipDataObject(IDataObject item)
         {
-            _data = CompressObject(getMainObjectDict(item));
-            Key = GenerateKey(_data);
+
+            string[] types = item.GetFormats();
+            foreach (var strCurrentType in types)
+            {
+                if (item.GetDataPresent(strCurrentType, false) && item.GetData(strCurrentType, false) != null)
+                {
+                    object lookedupItem = item.GetData(strCurrentType, false);
+                    using (MemoryStream ms = new MemoryStream())
+                    {
+                        int hash = lookedupItem.GetHashCode();
+                        if (string.IsNullOrEmpty(Key)) { Key = hash.ToString(); }
+
+                        if (!extractedItems.ContainsKey(hash))
+                        {
+
+                            if (lookedupItem is string)
+                            {
+                                var x = CompressString((string)lookedupItem);
+                                extractedItems.Add(hash, x);
+                                CompresionTypeLookup.Add(hash, DataType.Text);
+                            }
+
+                            else if (lookedupItem is System.Drawing.Bitmap)
+                            {
+                                extractedItems.Add(hash, CompressImage((System.Drawing.Bitmap)lookedupItem));
+                                CompresionTypeLookup.Add(hash, DataType.Image);
+
+                            }
+                            else if (lookedupItem is MemoryStream)
+                            {
+                                extractedItems.Add(hash, CompressStream((MemoryStream)lookedupItem));
+                                CompresionTypeLookup.Add(hash, DataType.MemoryStream);
+                            }
+                            else
+                            {
+                                extractedItems.Add(hash, CompressObject(lookedupItem));
+                                CompresionTypeLookup.Add(hash, DataType.Other);
+
+                            }
+                        }
+                        ExtractedTypeLookupTable.Add(strCurrentType, hash);
+                    }
+                }
+            }
+
+
+
+
+
+
+
+            //_data = CompressObject(getMainObjectDict(item));
+           // Key = GenerateKey(_data);
             Label = GenerateLabel((DataObject)item);
         }
 
         #endregion
+  
+        #region Compressions
 
-        #region sub Functions
-
-        private string GenerateKey(object o)
+        #region Compress
+        private static byte[] CompressString(string stringToCompress)
         {
-            try
+
+           using (MemoryStream streamToCompressTo = new MemoryStream())
             {
-                using (SHA1 sha1Hash = SHA1.Create())
+                using (DeflateStream compressor = new DeflateStream(streamToCompressTo, CompressionMode.Compress))
                 {
-
-                    byte[] bytes = ObjectToByteArray(o);
-                    _fileSize = bytes.Length;
-                    bytes = sha1Hash.ComputeHash(bytes);
-                    System.Text.StringBuilder builder = new System.Text.StringBuilder();
-                    for (int i = 0; i < bytes.Length; i++)
+                    using (System.IO.StreamWriter writer = new System.IO.StreamWriter(compressor))
                     {
-                        builder.Append(bytes[i].ToString("x2"));
+                        writer.Write(stringToCompress);
+                        writer.Flush();
                     }
-                    return builder.ToString();
+
                 }
+                return streamToCompressTo.ToArray();
             }
-            catch { }
-            return o.GetHashCode().ToString();
         }
 
-        private static byte[] ObjectToByteArray(Object obj)
+        private static byte[] CompressStream(MemoryStream StreamToCompress)
         {
-            BinaryFormatter bf = new BinaryFormatter();
-            using (var ms = new MemoryStream())
+            using (MemoryStream streamToCompressTo = new MemoryStream())
             {
-                bf.Serialize(ms, obj);
-                return ms.ToArray();
+                using (DeflateStream compressor = new DeflateStream(streamToCompressTo, CompressionMode.Compress))
+                {
+                    StreamToCompress.CopyTo(compressor);
+                }
+                return streamToCompressTo.ToArray();
             }
         }
-
-        private static object StreamToObject(Stream ar)
-        {
-            BinaryFormatter bf = new BinaryFormatter();
-            return bf.Deserialize(ar);
-        }
-
 
         private static byte[] CompressObject(object o)
         {
@@ -130,19 +161,6 @@ namespace Clipboard
             }
         }
 
-        private static object DecompressObject(object o)
-        {
-            var item = new MemoryStream();
-            using (DeflateStream Decompressor = new DeflateStream(new MemoryStream((byte[])o), CompressionMode.Decompress))
-            {
-                Decompressor.CopyTo(item);
-            }
-            item.Position = 0;
-            return StreamToObject(item);
-
-        }
-
-
         private static byte[] CompressImage(System.Drawing.Image o)
         {
             byte[] result = null;
@@ -154,25 +172,93 @@ namespace Clipboard
             return result;
         }
 
+        #endregion
+
+        #region Decompress
+
+        private static string DecompressString(byte[] CompressedString)
+        {
+
+            string s;
+            using (StreamReader reader = new StreamReader(DecompressStream(CompressedString)))
+            {
+                s = reader.ReadToEnd();
+            }
+            return s;
+        }
+
+        private static MemoryStream DecompressStream(Byte[] CompressedStream)
+        {
+            var item = new MemoryStream();
+            using (DeflateStream Decompressor = new DeflateStream(new MemoryStream(CompressedStream), CompressionMode.Decompress))
+            {
+                Decompressor.CopyTo(item);
+            }
+            item.Position = 0;
+            return item;
+        }
+
+        private static object DecompressObject(object o)
+        {
+            var item = DecompressStream((byte[])o);
+            return StreamToObject(item);
+        }
+        
         private static System.Drawing.Image DecompressImage(object o) { return System.Drawing.Image.FromStream(new MemoryStream((byte[])o)); }
 
 
+        #endregion
+        #endregion
 
+        #region Unknown Object Serializations
 
-        private Dictionary<string, object> getMainObjectDict(IDataObject data)
+        private static byte[] ObjectToByteArray(Object input)
         {
-
-            Dictionary<string, object> response = new Dictionary<string, object>();
-            foreach (string s in data.GetFormats())
+            BinaryFormatter bf = new BinaryFormatter();
+            using (var ms = new MemoryStream())
             {
-                if (data.GetDataPresent(s, false) && data.GetData(s, false) != null)
-                {
-                    response.Add(s, data.GetData(s));
-                }
+                bf.Serialize(ms, input);
+                return ms.ToArray();
             }
-            return response;
         }
 
+        private static object StreamToObject(Stream input)
+        {
+            BinaryFormatter bf = new BinaryFormatter();
+            return bf.Deserialize(input);
+        }
+
+        #endregion
+
+        #region Functions
+
+        /// <summary>
+        /// Extracts the raw data object based on format, from Extracted items
+        /// </summary>
+        /// <param name="format"></param>
+        /// <returns></returns>
+        private object GetData(string format)
+        {
+            int hash = ExtractedTypeLookupTable[format];
+            DataType CompressionType = CompresionTypeLookup[hash];
+            switch (CompressionType)
+            {
+                case DataType.Text:
+                    return DecompressString(extractedItems[hash]);
+                case DataType.Image:
+                    return DecompressImage(extractedItems[hash]);
+                case DataType.MemoryStream:
+                    return DecompressStream(extractedItems[hash]);
+                default:
+                    return DecompressObject(extractedItems[hash]);
+            }
+        }
+
+        /// <summary>
+            /// Generates the visable label to display on the screen
+            /// </summary>
+            /// <param name="obj"></param>
+            /// <returns></returns>
         private ToolStripLabel GenerateLabel(DataObject obj)
         {
 
@@ -185,13 +271,40 @@ namespace Clipboard
             else if (obj.ContainsImage())
             {
                 System.Drawing.Image thumb = obj.GetImage().GetThumbnailImage(16, 16, () => false, IntPtr.Zero);
-                return new ToolStripLabel(Type + " " + DateTime.Now.ToString("hhMMss"), thumb, false);
+                return new ToolStripLabel("Image " + DateTime.Now.ToString("hhMMss"), thumb, false);
             }
             else
             {
-                return new ToolStripLabel(Type + " " + DateTime.Now.ToString("hhMMss"), null, false);
+                return new ToolStripLabel("Object " + DateTime.Now.ToString("hhMMss"), null, false);
             }
         }
         #endregion
+
+        #region IDisposable Support
+        private bool disposedValue = false;
+
+        public virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    Label.Dispose();
+                }
+                extractedItems.Clear();
+                ExtractedTypeLookupTable.Clear();
+                CompresionTypeLookup.Clear();
+                disposedValue = true;
+              
+            }
+        }
+
+        void IDisposable.Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+        }
+        #endregion
+
     }
 }
