@@ -16,7 +16,7 @@ namespace Clipboard
 
         private readonly int TotalCount = 9;
         private ClipboardManager Manager;
-
+        private string ActiveKey = string.Empty;
         #endregion
 
         #region "Event Handles"
@@ -80,7 +80,7 @@ namespace Clipboard
                 Manager.Stop();
                 current.Text = "Resume";
             }
-            else { Manager.Start(); current.Text = "Pause"; }
+            else { Manager.Start(); current.Text = "Pause"; ActiveKey = string.Empty; }
         }
 
 
@@ -88,10 +88,13 @@ namespace Clipboard
 
         private void AddItemToCache(IDataObject obj)
         {
-            ClipDataObject dataObject = new ClipDataObject(obj);
-            CacheHandler.Insert(0, dataObject);
-            if (CacheHandler.Count > TotalCount) { CacheHandler.Remove(CacheHandler.Last()); GC.Collect(); }
-
+            ActiveKey = string.Empty;
+            string[] ActiveCache = (from Ca in CacheHandler select Ca.Key).ToArray();
+            ClipDataObject dataObject = new ClipDataObject(obj, ActiveCache);
+            if (!string.IsNullOrEmpty(dataObject.Key)) { 
+                CacheHandler.Insert(0, dataObject);
+                if (CacheHandler.Count > TotalCount) { CacheHandler.Remove(CacheHandler.Last()); GC.Collect(); }
+            }
         }
 
         private ToolStripItem[] CachedItems()
@@ -100,9 +103,8 @@ namespace Clipboard
 
             foreach (var item in CacheHandler)
             {
-                var X = item.Label;
-                X.Click += (sender, e) => ItemClickEvent(sender, e, item.Key);
-                output.Add(X);
+                item.Label.Click += (sender, e) => ItemClickEvent(sender, e, item.Key);
+                output.Add(item.Label);
             }
             if (output.Count > 0) { return output.ToArray(); }
             return null;
@@ -110,14 +112,18 @@ namespace Clipboard
 
         private void ItemClickEvent(object sender, EventArgs e, string key)
         {
-            Manager.Stop();
-            var X = (from y in CacheHandler
-                     where y.Key == key
-                     select y).First();
-            System.Windows.Forms.Clipboard.Clear();
+            if (ActiveKey != key)
+            {
+                ActiveKey = key;
+                Manager.Stop();
 
-            System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject);
-            Manager.Start();
+                var X = (from y in CacheHandler
+                         where y.Key == key
+                         select y).First();
+                System.Windows.Forms.Clipboard.Clear();
+                System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject());
+                Manager.Start();
+            }
         }
 
         private ToolStripItem[] SaveCachedItems() { return null; }

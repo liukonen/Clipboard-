@@ -12,9 +12,9 @@ namespace Clipboard
     {
         #region Global Variables
 
-        private Dictionary<int, byte[]> extractedItems = new Dictionary<int, byte[]>();
-        private Dictionary<string, int> ExtractedTypeLookupTable = new Dictionary<string, int>();
-        private Dictionary<int, DataType> CompresionTypeLookup = new Dictionary<int, DataType>();
+        private Dictionary<string, byte[]> extractedItems = new Dictionary<string, byte[]>();
+        private Dictionary<string, string> ExtractedTypeLookupTable = new Dictionary<string, string>();
+        private Dictionary<string, DataType> CompresionTypeLookup = new Dictionary<string, DataType>();
         
         #endregion
 
@@ -29,23 +29,18 @@ namespace Clipboard
         /// </summary>
         public string Key { get; }
 
-        public DataObject ClipboardObject
+        public DataObject ClipboardObject()
         {
-            get
-            {
                 DataObject data = new DataObject();
                 foreach (string item in Formats)
                 {
                     data.SetData(item, GetData(item));
                 }
                 return data;
-            }
         }
 
         public ToolStripLabel Label { get; }
-
         public long FileSize { get { try { return (from X in extractedItems.Values select X.Length).Sum(); } catch { } return int.MaxValue; } }
-
         public string[] Formats { get { return ExtractedTypeLookupTable.Keys.ToArray(); } }
 
         #endregion
@@ -55,10 +50,16 @@ namespace Clipboard
         /// <summary>
         /// Constructs a new Clip object in memory from the dataobject passed in from the clipboard
         /// </summary>
-        /// <param name="item"></param>
-        public ClipDataObject(IDataObject item)
-        {
+        /// <param name="item">Clipboard Data object</param>
+        public ClipDataObject(IDataObject item) : this(item, new string[] { }) { }
 
+        /// <summary>
+        /// Constructs a new Clip object in memory from the dataobject passed in from the clipboard
+        /// </summary>
+        /// <param name="item">Clipboard Data object</param>
+        /// <param name="FilteredKeys">Optional Filtered keys for distinct items. If there is a match, the key will be empty</param>
+        public ClipDataObject(IDataObject item, string[] FilteredKeys)
+        {
             string[] types = item.GetFormats();
             foreach (var strCurrentType in types)
             {
@@ -67,57 +68,73 @@ namespace Clipboard
                     object lookedupItem = item.GetData(strCurrentType, false);
                     using (MemoryStream ms = new MemoryStream())
                     {
-                        int hash = lookedupItem.GetHashCode();
-                        if (string.IsNullOrEmpty(Key)) { Key = hash.ToString(); }
+                        KeyValuePair<string, byte[]> response;
+                        DataType CompressionType;
 
-                        if (!extractedItems.ContainsKey(hash))
+                        if (lookedupItem is string)
                         {
-
-                            if (lookedupItem is string)
-                            {
-                                var x = CompressString((string)lookedupItem);
-                                extractedItems.Add(hash, x);
-                                CompresionTypeLookup.Add(hash, DataType.Text);
-                            }
-
-                            else if (lookedupItem is System.Drawing.Bitmap)
-                            {
-                                extractedItems.Add(hash, CompressImage((System.Drawing.Bitmap)lookedupItem));
-                                CompresionTypeLookup.Add(hash, DataType.Image);
-
-                            }
-                            else if (lookedupItem is MemoryStream)
-                            {
-                                extractedItems.Add(hash, CompressStream((MemoryStream)lookedupItem));
-                                CompresionTypeLookup.Add(hash, DataType.MemoryStream);
-                            }
-                            else
-                            {
-                                extractedItems.Add(hash, CompressObject(lookedupItem));
-                                CompresionTypeLookup.Add(hash, DataType.Other);
-
-                            }
+                            response = Lookup((string)lookedupItem, FilteredKeys);
+                            CompressionType = DataType.Text;
                         }
-                        ExtractedTypeLookupTable.Add(strCurrentType, hash);
+
+                        else if (lookedupItem is System.Drawing.Bitmap)
+                        {
+                            response = Lookup((System.Drawing.Bitmap)lookedupItem, FilteredKeys);
+                            CompressionType = DataType.Image;
+                        }
+                        else if (lookedupItem is MemoryStream)
+                        {
+                            response = Lookup((MemoryStream)lookedupItem, FilteredKeys);
+                            CompressionType = DataType.MemoryStream;
+                        }
+                        else
+                        {
+                            response = LookupObject(lookedupItem, FilteredKeys);
+                            CompressionType = DataType.Other;
+                        }
+                        if (response.Key == string.Empty) { break; }
+                        if (string.IsNullOrEmpty(Key)) { Key = response.Key; }
+                        if (!extractedItems.ContainsKey(response.Key)) { extractedItems.Add(response.Key, response.Value); }
+                        if (!CompresionTypeLookup.ContainsKey(response.Key)) { CompresionTypeLookup.Add(response.Key, CompressionType); }
+                        ExtractedTypeLookupTable.Add(strCurrentType, response.Key);
                     }
                 }
             }
-
-
-
-
-
-
-
-            //_data = CompressObject(getMainObjectDict(item));
-           // Key = GenerateKey(_data);
             Label = GenerateLabel((DataObject)item);
         }
-
         #endregion
-  
-        #region Compressions
 
+        #region Object Specific Transformers
+        private static KeyValuePair<string, byte[]> Lookup(string item, string[] filterHash)
+        {
+            string hash = Shared.GenerateHash(System.Text.Encoding.Unicode.GetBytes(item)); 
+            if (!filterHash.Contains(hash))            {                return new KeyValuePair<string, byte[]>(hash, CompressString(item));            }
+            return new KeyValuePair<string, byte[]>(string.Empty, null);
+        }
+
+        private static KeyValuePair<string, byte[]> Lookup(System.Drawing.Bitmap item, string[] filterHash)
+        {
+            string hash = Shared.GenerateHash(Shared.imageToByte(item)); 
+            if (!filterHash.Contains(hash))            {                return new KeyValuePair<string, byte[]>(hash, CompressImage(item));            }
+            return new KeyValuePair<string, byte[]>(string.Empty, null);
+        }
+
+        private static KeyValuePair<string, byte[]> Lookup(MemoryStream item, string[] filterHash)
+        {
+            string hash = Shared.GenerateHash((item).ToArray());
+            if (!filterHash.Contains(hash)) { return new KeyValuePair<string, byte[]>(hash, CompressStream(item)); }
+            return new KeyValuePair<string, byte[]>(string.Empty, null);
+        }
+
+        private static KeyValuePair<string, byte[]> LookupObject(Object item, string[] filterHash)
+        {
+            string hash = item.GetHashCode().ToString();
+            if (!filterHash.Contains(hash)) { return new KeyValuePair<string, byte[]>(hash, CompressObject(item)); }
+            return new KeyValuePair<string, byte[]>(string.Empty, null);
+        }
+        #endregion
+ 
+        #region Compressions
         #region Compress
         private static byte[] CompressString(string stringToCompress)
         {
@@ -239,7 +256,7 @@ namespace Clipboard
         /// <returns></returns>
         private object GetData(string format)
         {
-            int hash = ExtractedTypeLookupTable[format];
+            string hash = ExtractedTypeLookupTable[format];
             DataType CompressionType = CompresionTypeLookup[hash];
             switch (CompressionType)
             {
