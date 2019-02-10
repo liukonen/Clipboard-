@@ -5,6 +5,7 @@ using System.Threading;
 using System.Windows.Forms;
 using System.Linq;
 using System.Security.Cryptography;
+using MsgPack;
 
 namespace Clipboard
 {
@@ -14,15 +15,29 @@ namespace Clipboard
         #region "Globals"
         private NotifyIcon notifyIcon;
 
-        private readonly int TotalCount = 9;
+        private List<ClipDataObject> CacheHandler = new List<ClipDataObject>();
         private ClipboardManager Manager;
         private string ActiveKey = string.Empty;
+        #endregion
+
+        #region Properties
+        private int TotalCount
+        {
+            get
+            {
+                string itemRead = Shared.ReadAppSetting("NumberOfSupportedCaches");
+                //if we can't properly parse, its bigger then 10, or less then zero, fall back to 9
+                if (!int.TryParse(itemRead, out int recordCount) || recordCount > 10 || recordCount < 0) { recordCount = 9; }
+                return recordCount;
+            }
+        }
         #endregion
 
         #region "Event Handles"
 
         public MainApp()
         {
+            LoadCacheItemsFromDisk();
             notifyIcon = new NotifyIcon
             {
                 Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath),
@@ -49,10 +64,10 @@ namespace Clipboard
             value.Items.Add(new ToolStripSeparator());
 
             if (items != null)
-            //TODO: implement new save functionality//{ value.Items.Add(new ToolStripMenuItem("Save", null, SaveCachedItems())); }
-            value.Items.Add(new ToolStripSeparator());
+                //TODO: implement new save functionality//{ value.Items.Add(new ToolStripMenuItem("Save", null, SaveCachedItems())); }
+                value.Items.Add(new ToolStripSeparator());
             //TODO: Implement Settings functionality
-   
+
             value.Items.Add(SettingsMenu());
             value.Items.Add(new ToolStripLabel("About", null, false, MenuAboutClick));
             value.Items.Add(new ToolStripLabel("Exit", null, false, MenuExitClick));
@@ -84,14 +99,14 @@ namespace Clipboard
         }
 
 
-        private List<ClipDataObject> CacheHandler = new List<ClipDataObject>();
 
         private void AddItemToCache(IDataObject obj)
         {
             ActiveKey = string.Empty;
             string[] ActiveCache = (from Ca in CacheHandler select Ca.Key).ToArray();
             ClipDataObject dataObject = new ClipDataObject(obj, ActiveCache);
-            if (!string.IsNullOrEmpty(dataObject.Key)) { 
+            if (!string.IsNullOrEmpty(dataObject.Key))
+            {
                 CacheHandler.Insert(0, dataObject);
                 if (CacheHandler.Count > TotalCount) { CacheHandler.Remove(CacheHandler.Last()); GC.Collect(); }
             }
@@ -136,7 +151,7 @@ namespace Clipboard
         public void MenuSettingsUpdateNightImages(object sender, EventArgs e) { }
 
 
-        private void MenuExitClick(object sender, EventArgs e) { Application.Exit(); }
+        private void MenuExitClick(object sender, EventArgs e) { SaveCacheItemsToDisk(); Application.Exit(); }
 
         private void MenuAboutClick(object sender, EventArgs e)
         {
@@ -156,7 +171,58 @@ namespace Clipboard
 
         #region "Functions and Methods"
 
+        private void LoadCacheItemsFromDisk()
+        {
+            try {
 
+                if (Shared.ExitCaching())
+                {
+                    using (System.IO.MemoryStream MS = new System.IO.MemoryStream(System.IO.File.ReadAllBytes("cache.mp")))
+                    {
+                        if (CacheHandler == null) { CacheHandler = new List<ClipDataObject>(); }
+                        var X = MsgPack.Serialization.MessagePackSerializer.Get<List<SerializableClipObject>>();
+                        var Y = X.Unpack(MS);
+
+                        foreach (var item in Y)
+                        {
+                            CacheHandler.Add(new ClipDataObject(item));
+                        }
+                    }
+                }
+
+            }catch{ }
+        }
+
+        private void SaveCacheItemsToDisk()
+        {
+            try
+            {
+                if (Shared.ExitCaching())
+                {
+                    int MaxFileSize = Shared.MaxCacheSize();
+                    List<SerializableClipObject> SaveObject = new List<SerializableClipObject>();
+                    int counter = 0;
+                    foreach (var item in CacheHandler)
+                    {
+                        if (MaxFileSize > item.FileSize + counter)
+                        {
+                            counter += (int)item.FileSize;
+                            SaveObject.Add(item.ToOjbect());
+                        }
+                    }
+
+                    using (System.IO.MemoryStream MS = new System.IO.MemoryStream())
+                    {
+
+                        var X = MsgPack.Serialization.MessagePackSerializer.Get<List<SerializableClipObject>>();
+                        X.Pack(MS, SaveObject);
+                        System.IO.File.WriteAllBytes("Cache.mp", MS.ToArray());
+                    }
+                }
+            }
+            catch { }
+
+        }
 
 
 

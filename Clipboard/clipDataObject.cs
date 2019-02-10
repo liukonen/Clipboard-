@@ -14,12 +14,11 @@ namespace Clipboard
 
         private Dictionary<string, byte[]> extractedItems = new Dictionary<string, byte[]>();
         private Dictionary<string, string> ExtractedTypeLookupTable = new Dictionary<string, string>();
-        private Dictionary<string, DataType> CompresionTypeLookup = new Dictionary<string, DataType>();
-        
+        private Dictionary<string, Shared.DataType> CompresionTypeLookup = new Dictionary<string, Shared.DataType>();
+
         #endregion
 
         #region Enums
-        private enum DataType : byte { Text = 0, Image = 1, MemoryStream = 2, Other = 3 }
         #endregion
 
         #region Properties
@@ -31,12 +30,12 @@ namespace Clipboard
 
         public DataObject ClipboardObject()
         {
-                DataObject data = new DataObject();
-                foreach (string item in Formats)
-                {
-                    data.SetData(item, GetData(item));
-                }
-                return data;
+            DataObject data = new DataObject();
+            foreach (string item in Formats)
+            {
+                data.SetData(item, GetData(item));
+            }
+            return data;
         }
 
         public ToolStripLabel Label { get; }
@@ -69,28 +68,28 @@ namespace Clipboard
                     using (MemoryStream ms = new MemoryStream())
                     {
                         KeyValuePair<string, byte[]> response;
-                        DataType CompressionType;
+                        Shared.DataType CompressionType;
 
                         if (lookedupItem is string)
                         {
                             response = Lookup((string)lookedupItem, FilteredKeys);
-                            CompressionType = DataType.Text;
+                            CompressionType = Shared.DataType.Text;
                         }
 
                         else if (lookedupItem is System.Drawing.Bitmap)
                         {
                             response = Lookup((System.Drawing.Bitmap)lookedupItem, FilteredKeys);
-                            CompressionType = DataType.Image;
+                            CompressionType = Shared.DataType.Image;
                         }
                         else if (lookedupItem is MemoryStream)
                         {
                             response = Lookup((MemoryStream)lookedupItem, FilteredKeys);
-                            CompressionType = DataType.MemoryStream;
+                            CompressionType = Shared.DataType.MemoryStream;
                         }
                         else
                         {
                             response = LookupObject(lookedupItem, FilteredKeys);
-                            CompressionType = DataType.Other;
+                            CompressionType = Shared.DataType.Other;
                         }
                         if (response.Key == string.Empty) { break; }
                         if (string.IsNullOrEmpty(Key)) { Key = response.Key; }
@@ -102,20 +101,32 @@ namespace Clipboard
             }
             Label = GenerateLabel((DataObject)item);
         }
+
+        public ClipDataObject(SerializableClipObject fromOjbect)
+        {
+            extractedItems = fromOjbect.ExtractedItems;
+            ExtractedTypeLookupTable = fromOjbect.ExtractedTypeLookupTable;
+            CompresionTypeLookup = new Dictionary<string, Shared.DataType>();
+            foreach (var item in fromOjbect.CompresionTypeLookup)
+            {
+                CompresionTypeLookup.Add(item.Key, (Shared.DataType)item.Value);
+            }
+            Label = GenerateLabel(ClipboardObject());
+        }
         #endregion
 
         #region Object Specific Transformers
         private static KeyValuePair<string, byte[]> Lookup(string item, string[] filterHash)
         {
-            string hash = Shared.GenerateHash(System.Text.Encoding.Unicode.GetBytes(item)); 
-            if (!filterHash.Contains(hash))            {                return new KeyValuePair<string, byte[]>(hash, CompressString(item));            }
+            string hash = Shared.GenerateHash(System.Text.Encoding.Unicode.GetBytes(item));
+            if (!filterHash.Contains(hash)) { return new KeyValuePair<string, byte[]>(hash, CompressString(item)); }
             return new KeyValuePair<string, byte[]>(string.Empty, null);
         }
 
         private static KeyValuePair<string, byte[]> Lookup(System.Drawing.Bitmap item, string[] filterHash)
         {
-            string hash = Shared.GenerateHash(Shared.imageToByte(item)); 
-            if (!filterHash.Contains(hash))            {                return new KeyValuePair<string, byte[]>(hash, CompressImage(item));            }
+            string hash = Shared.GenerateHash(Shared.ImageToByte(item));
+            if (!filterHash.Contains(hash)) { return new KeyValuePair<string, byte[]>(hash, CompressImage(item)); }
             return new KeyValuePair<string, byte[]>(string.Empty, null);
         }
 
@@ -133,13 +144,13 @@ namespace Clipboard
             return new KeyValuePair<string, byte[]>(string.Empty, null);
         }
         #endregion
- 
+
         #region Compressions
         #region Compress
         private static byte[] CompressString(string stringToCompress)
         {
 
-           using (MemoryStream streamToCompressTo = new MemoryStream())
+            using (MemoryStream streamToCompressTo = new MemoryStream())
             {
                 using (DeflateStream compressor = new DeflateStream(streamToCompressTo, CompressionMode.Compress))
                 {
@@ -220,7 +231,7 @@ namespace Clipboard
             var item = DecompressStream((byte[])o);
             return StreamToObject(item);
         }
-        
+
         private static System.Drawing.Image DecompressImage(object o) { return System.Drawing.Image.FromStream(new MemoryStream((byte[])o)); }
 
 
@@ -247,6 +258,25 @@ namespace Clipboard
 
         #endregion
 
+
+        #region Public Functions
+
+
+        public SerializableClipObject ToOjbect()
+        {
+            if (FileSize > Shared.MaxFileSize()) { return null; }
+            SerializableClipObject response = new SerializableClipObject{CompresionTypeLookup = new Dictionary<string, byte>()};
+            foreach (var item in CompresionTypeLookup)
+            {
+                response.CompresionTypeLookup.Add(item.Key, (byte)item.Value);
+            }
+            response.ExtractedItems = extractedItems;
+            response.ExtractedTypeLookupTable = ExtractedTypeLookupTable;
+            return response;
+        }
+
+        #endregion
+
         #region Functions
 
         /// <summary>
@@ -257,14 +287,14 @@ namespace Clipboard
         private object GetData(string format)
         {
             string hash = ExtractedTypeLookupTable[format];
-            DataType CompressionType = CompresionTypeLookup[hash];
+            Shared.DataType CompressionType = CompresionTypeLookup[hash];
             switch (CompressionType)
             {
-                case DataType.Text:
+                case Shared.DataType.Text:
                     return DecompressString(extractedItems[hash]);
-                case DataType.Image:
+                case Shared.DataType.Image:
                     return DecompressImage(extractedItems[hash]);
-                case DataType.MemoryStream:
+                case Shared.DataType.MemoryStream:
                     return DecompressStream(extractedItems[hash]);
                 default:
                     return DecompressObject(extractedItems[hash]);
@@ -272,10 +302,10 @@ namespace Clipboard
         }
 
         /// <summary>
-            /// Generates the visable label to display on the screen
-            /// </summary>
-            /// <param name="obj"></param>
-            /// <returns></returns>
+        /// Generates the visable label to display on the screen
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
         private ToolStripLabel GenerateLabel(DataObject obj)
         {
 
@@ -312,7 +342,7 @@ namespace Clipboard
                 ExtractedTypeLookupTable.Clear();
                 CompresionTypeLookup.Clear();
                 disposedValue = true;
-              
+
             }
         }
 
@@ -322,6 +352,15 @@ namespace Clipboard
             Dispose(true);
         }
         #endregion
+
+    }
+
+    [Serializable]
+    public class SerializableClipObject
+    {
+        public Dictionary<string, byte[]> ExtractedItems { get; set; }
+        public Dictionary<string, string> ExtractedTypeLookupTable { get; set; }
+        public Dictionary<string, byte> CompresionTypeLookup { get; set; }
 
     }
 }
