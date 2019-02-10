@@ -4,7 +4,7 @@ reason: I wanted an application that I could use that kept an in memory cache of
 
 ## future enhancements
 * Be able to save clipped items
-* store / retrieve clip items on drive for reboots
+* ~~store / retrieve clip items on drive for reboots~~
   * cryptography on stored items
 * ~~In memory compression on text items~~
 * ~~potential compression on images... need to research what is actually saved on clip~~
@@ -17,7 +17,7 @@ reason: I wanted an application that I could use that kept an in memory cache of
   * Drag and drop support
   * Save support
 * have a better icon then "default"
-* experiment with 3rd party serialization engines for better performance and or compression
+* ~~experiment with 3rd party serialization engines for better performance and or compression~~
 * ~~pause / resume button~~
 
 ## Learnings
@@ -26,9 +26,13 @@ reason: I wanted an application that I could use that kept an in memory cache of
 * low level pointers
 * dll import
 * In Memory image formating
+* Message Pack  (https://msgpack.org) serialization and deserialization
+
 
 ### Existing / reinforce
 * sha1 hashing
 * binary serialization
 * winform development
 * notification icon development
+* System Cryptograghy Namespace
+
