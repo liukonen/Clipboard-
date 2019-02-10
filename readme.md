@@ -11,12 +11,12 @@ reason: I wanted an application that I could use that kept an in memory cache of
 * options form, to configure compression, max number of items, and cryptography
 * pre defined hotkeys for cached items
 * Lock particular cache items to list
-* prevent duplicate items from being in memory
+* ~~prevent duplicate items from being in memory~~ - Note: would still like to research format17/dib/Bitmap compression more
 * better about me screen
 * winform with better display of cache items (optional)
   * Drag and drop support
   * Save support
-* have a better icon then "default"
+* ~~have a better icon then "default"~~
 * ~~experiment with 3rd party serialization engines for better performance and or compression~~
 * ~~pause / resume button~~
 
