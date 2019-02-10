@@ -151,7 +151,7 @@ namespace Clipboard
         public void MenuSettingsUpdateNightImages(object sender, EventArgs e) { }
 
 
-        private void MenuExitClick(object sender, EventArgs e) { SaveCacheItemsToDisk(); Application.Exit(); }
+        private void MenuExitClick(object sender, EventArgs e) { Application.Exit(); }
 
         private void MenuAboutClick(object sender, EventArgs e)
         {
@@ -193,7 +193,7 @@ namespace Clipboard
             }catch{ }
         }
 
-        private void SaveCacheItemsToDisk()
+        public void SaveCacheItemsToDisk()
         {
             try
             {
@@ -253,6 +253,8 @@ namespace Clipboard
         void IDisposable.Dispose() { Dispose(true); }
         #endregion
 
+
+
         #region Main - Program entry point
         /// <summary>Program entry point.</summary>
         /// <param name="args">Command Line Arguments</param>
@@ -273,7 +275,8 @@ namespace Clipboard
                         MainApp notificationIcon = new MainApp();
                         notificationIcon.notifyIcon.Visible = true;
                         GC.Collect();
-                        Application.Run();
+                     Application.Run();
+                        notificationIcon.SaveCacheItemsToDisk();
                         notificationIcon.notifyIcon.Dispose();
                     }
                     catch (Exception x)
