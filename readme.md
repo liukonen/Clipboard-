@@ -3,7 +3,7 @@
 reason: I wanted an application that I could use that kept an in memory cache of mutiple clipboard items. That way if I accidently copied over some data I was working on, I could go back to the original version
 
 ## future enhancements
-* Be able to save clipped items
+* ~~Be able to save clipped items~~
 * ~~store / retrieve clip items on drive for reboots~~
   * cryptography on stored items
 * ~~In memory compression on text items~~
