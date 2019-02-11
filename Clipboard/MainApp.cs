@@ -18,6 +18,7 @@ namespace Clipboard
         private List<ClipDataObject> CacheHandler = new List<ClipDataObject>();
         private ClipboardManager Manager;
         private string ActiveKey = string.Empty;
+        private Boolean SaveActive = false;
         #endregion
 
         #region Properties
@@ -63,9 +64,17 @@ namespace Clipboard
             if (items != null) { value.Items.AddRange(items); }
             value.Items.Add(new ToolStripSeparator());
 
-            if (items != null)
-                //TODO: implement new save functionality//{ value.Items.Add(new ToolStripMenuItem("Save", null, SaveCachedItems())); }
+            if (items != null) { 
                 value.Items.Add(new ToolStripSeparator());
+
+            //ToolStripMenuItem Save = new ToolStripMenuItem("Save", null);
+            //    foreach (var item in SaveCachedItems())
+            //    {
+            //        Save.DropDownItems.Add(item);
+            //    }
+
+           // value.Items.Add(Save);
+            }
             //TODO: Implement Settings functionality
 
             value.Items.Add(SettingsMenu());
@@ -114,34 +123,47 @@ namespace Clipboard
 
         private ToolStripItem[] CachedItems()
         {
-            List<ToolStripItem> output = new List<ToolStripItem>();
+            List<ToolStripMenuItem> output = new List<ToolStripMenuItem>();
 
             foreach (var item in CacheHandler)
             {
-                item.Label.Click += (sender, e) => ItemClickEvent(sender, e, item.Key);
+                //item.Label.Click += ItemClickEvent;
+                if(item.Label.DropDownItems.Count > 0)
+                {
+                    item.Label.DropDownItems[0].Click -= ItemClickEvent;
+                    item.Label.DropDownItems[0].Click += ItemClickEvent;
+                    item.Label.DropDownItems[1].Click -= ItemSaveClickEvent;
+                    item.Label.DropDownItems[1].Click += ItemSaveClickEvent;
+                }
+                //item.Label.Click -= ItemClickEvent;
+                //item.Label.Click += ItemClickEvent;
+
                 output.Add(item.Label);
             }
             if (output.Count > 0) { return output.ToArray(); }
             return null;
         }
 
-        private void ItemClickEvent(object sender, EventArgs e, string key)
+        private void ItemSaveClickEvent(object sender, EventArgs e)
         {
-            if (ActiveKey != key)
-            {
-                ActiveKey = key;
-                Manager.Stop();
+            var X = (from y in CacheHandler
+                     where y.Key == ((ToolStripLabel)sender).Name.Substring(4)
+                     select y).First();
+            System.Windows.Forms.Clipboard.Clear();
+            SaveAsObject saveAsObject = new SaveAsObject(X.ClipboardObject());
+        }
 
-                var X = (from y in CacheHandler
-                         where y.Key == key
+        private void ItemClickEvent(object sender, EventArgs e)
+        {
+                 Manager.Stop();
+
+            var X = (from y in CacheHandler
+                     where y.Key == ((ToolStripLabel)sender).Name
                          select y).First();
                 System.Windows.Forms.Clipboard.Clear();
                 System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject());
                 Manager.Start();
-            }
         }
-
-        private ToolStripItem[] SaveCachedItems() { return null; }
 
 
         public void MenuSettingsUpdateLocation(object sender, EventArgs e) { }
