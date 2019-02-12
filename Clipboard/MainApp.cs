@@ -4,8 +4,7 @@ using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 using System.Linq;
-using System.Security.Cryptography;
-using MsgPack;
+using System.Reflection;
 
 namespace Clipboard
 {
@@ -14,88 +13,49 @@ namespace Clipboard
     {
         #region "Globals"
         private NotifyIcon notifyIcon;
-
         private List<ClipDataObject> CacheHandler = new List<ClipDataObject>();
         private ClipboardManager Manager;
-        private string ActiveKey = string.Empty;
-        private Boolean SaveActive = false;
+        private int _totalCount = 9;
+        private Boolean _useEncryption = false;
+        private Boolean _saveOnExit;
         #endregion
 
         #region Properties
-        private int TotalCount
-        {
-            get
-            {
-                string itemRead = Shared.ReadAppSetting("NumberOfSupportedCaches");
-                //if we can't properly parse, its bigger then 10, or less then zero, fall back to 9
-                if (!int.TryParse(itemRead, out int recordCount) || recordCount > 10 || recordCount < 0) { recordCount = 9; }
-                return recordCount;
-            }
-        }
+        private int TotalCount { get { return _totalCount; } set { _totalCount = value; Shared.AddUpdateAppSettings(Shared.cNumberOfSupportedCaches, value.ToString()); } }
+        private Boolean UseEncryption { get { return _useEncryption; } set { _useEncryption = value; Shared.AddUpdateAppSettings(Shared.cUseSaveEncryption, value.ToString()); } }
+        private Boolean SaveOnExit { get { return _saveOnExit; } set { _saveOnExit = value; Shared.AddUpdateAppSettings(Shared.cExitCaching, value.ToString()); } }
         #endregion
 
         #region "Event Handles"
 
+        /// <summary>
+        /// Event Load
+        /// </summary>
         public MainApp()
         {
+            LoadSettings();
             LoadCacheItemsFromDisk();
-            notifyIcon = new NotifyIcon
-            {
-                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath),
-                Text = "Clipboard++",
-                ContextMenuStrip = ConstructContextMenu()
-            };
-
+            notifyIcon = new NotifyIcon { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath), Text = "Clipboard++", ContextMenuStrip = ConstructContextMenu() };
             Manager = new ClipboardManager();
-            Manager.ClipboardChanged += OnTimedEvent;
+            Manager.ClipboardChanged += OnClipboardChangeEvent;
         }
 
-        private void OnTimedEvent(object sender, ClipboardChangedEventArgs e)
+        /// <summary>
+        /// Event Clipboard Change Event
+        /// </summary>
+        /// <param name="sender">ClipboardManager Manager</param>
+        /// <param name="e">Clipboard Changed Event Args</param>
+        private void OnClipboardChangeEvent(object sender, ClipboardChangedEventArgs e)
         {
             AddItemToCache(e._data);
             notifyIcon.ContextMenuStrip = ConstructContextMenu();
         }
 
-
-        public ContextMenuStrip ConstructContextMenu()
-        {
-            ContextMenuStrip value = new ContextMenuStrip();
-            ToolStripItem[] items = CachedItems();
-            if (items != null) { value.Items.AddRange(items); }
-            value.Items.Add(new ToolStripSeparator());
-
-            if (items != null) { 
-                value.Items.Add(new ToolStripSeparator());
-
-            //ToolStripMenuItem Save = new ToolStripMenuItem("Save", null);
-            //    foreach (var item in SaveCachedItems())
-            //    {
-            //        Save.DropDownItems.Add(item);
-            //    }
-
-           // value.Items.Add(Save);
-            }
-            //TODO: Implement Settings functionality
-
-            value.Items.Add(SettingsMenu());
-            value.Items.Add(new ToolStripLabel("About", null, false, MenuAboutClick));
-            value.Items.Add(new ToolStripLabel("Exit", null, false, MenuExitClick));
-            return value;
-
-        }
-
-
-        private ToolStripMenuItem SettingsMenu()
-        {
-            ToolStripMenuItem SettingsMenuItem = new ToolStripMenuItem() { Text = "Settings" };
-
-            ToolStripButton PauseResume = new ToolStripButton("Pause", null, PauseResume_ClickEvent);
-            SettingsMenuItem.DropDownItems.Add(PauseResume);
-
-            return SettingsMenuItem;
-
-        }
-
+        /// <summary>
+        /// Handles the Pause / Resume Menu Button
+        /// </summary>
+        /// <param name="sender">Settings.ToolStripButton PauseResume</param>
+        /// <param name="e"></param>
         private void PauseResume_ClickEvent(object sender, EventArgs e)
         {
             ToolStripButton current = ((ToolStripButton)sender);
@@ -104,14 +64,141 @@ namespace Clipboard
                 Manager.Stop();
                 current.Text = "Resume";
             }
-            else { Manager.Start(); current.Text = "Pause"; ActiveKey = string.Empty; }
+            else { Manager.Start(); current.Text = "Pause"; }
+        }
+ 
+        /// <summary>
+        /// Handles the Cached Item Save button event
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void ItemSaveClickEvent(object sender, EventArgs e)
+        {
+            var X = (from y in CacheHandler
+                     where y.Key == ((ToolStripLabel)sender).Name.Substring(4)
+                     select y).First();
+            System.Windows.Forms.Clipboard.Clear();
+            Shared.SaveAsObject(X.ClipboardObject());
         }
 
+        /// <summary>
+        /// Handles the Cached Item Copy Event
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void ItemClickEvent(object sender, EventArgs e)
+        {
+            Manager.Stop();
 
+            var X = (from y in CacheHandler
+                     where y.Key == ((ToolStripLabel)sender).Name
+                     select y).First();
+            System.Windows.Forms.Clipboard.Clear();
+            System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject());
+            Manager.Start();
+        }
 
+        /// <summary>
+        /// Handles the Settings.Save Event
+        /// </summary>
+        /// <param name="sender">ToolStripMenuItem save</param>
+        /// <param name="e"></param>
+        private void SaveOnExitClickEvent(object sender, EventArgs e)
+        {
+            SaveOnExit = !SaveOnExit;
+            ((ToolStripMenuItem)sender).Checked = SaveOnExit;
+        }
+
+        /// <summary>
+        /// Handles the Settings.Encrypt Event
+        /// </summary>
+        /// <param name="sender">ToolStripMenuItem Encrpyt</param>
+        /// <param name="e"></param>
+        private void EncryptClickEvent(object sender, EventArgs e)
+        {
+            UseEncryption = !UseEncryption;
+            ((ToolStripMenuItem)sender).Checked = UseEncryption;
+        }
+
+        /// <summary>
+        /// Handles the Menu Exit Event
+        /// </summary>
+        /// <param name="sender">ToolStripLabel "Exit"</param>
+        /// <param name="e"></param>
+        private void MenuExitClick(object sender, EventArgs e) { Application.Exit(); }
+
+        /// <summary>
+        /// Handles the Menu About Event
+        /// </summary>
+        /// <param name="sender">ToolStripLabel "About"</param>
+        /// <param name="e"></param>
+        private void MenuAboutClick(object sender, EventArgs e)
+        {
+            string Name = this.GetType().Assembly.GetName().Name;
+
+            System.Text.StringBuilder message = new System.Text.StringBuilder();
+
+            string name = ((AssemblyTitleAttribute)this.GetType().Assembly.GetCustomAttributes(typeof(AssemblyTitleAttribute), false)[0]).Title;
+            string Copyright = ((AssemblyCopyrightAttribute)this.GetType().Assembly.GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false)[0]).Copyright;
+            string Version = this.GetType().Assembly.GetName().Version.ToString();
+
+            message.Append(name).Append(Environment.NewLine).Append(Copyright).Append(Environment.NewLine).Append(Environment.NewLine).Append(Version);
+            MessageBox.Show(message.ToString(), Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// Handles the Settings Clear Event
+        /// </summary>
+        /// <param name="sender">ToolStripLabel Clear</param>
+        /// <param name="e"></param>
+        private void ClearClickEvent(object sender, EventArgs e) {
+            CacheHandler.Clear();
+            notifyIcon.ContextMenuStrip = ConstructContextMenu(); }
+  
+        /// <summary>
+        /// Updates the Max File Size you can save in cache (max 50mb)
+        /// </summary>
+        /// <param name="sender">ToolStripMenuItem setFileSize </param>
+        /// <param name="e"></param>
+        private void UpdateMaxFileSize(object sender, EventArgs e)
+        {
+            var box = Microsoft.VisualBasic.Interaction.InputBox("Please enter max size of individual items in file storage to use. Use MB or KB at the end of the number for easy entry.", "Max File Size", "50MB");
+            if (Shared.ValidateMaxFileSize(box))
+            {
+                MessageBox.Show("Settings will take place on restart of application", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Shared.AddUpdateAppSettings(Shared.cMaxFileSize, Shared.ConvertFileSize(box).ToString());
+            }
+            else { MessageBox.Show("Value was incorrect, please try again", "Invalid", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        /// <summary>
+        /// Updates the Max Cache Size you can save (max 500mb)
+        /// </summary>
+        /// <param name="sender">ToolStripMenuItem setCacheSize </param>
+        /// <param name="e"></param>
+        private void UpdateMaxCacheSize(object sender, EventArgs e)
+        {
+            string box = Microsoft.VisualBasic.Interaction.InputBox("Please enter max size of total file size to use. Use MB or KB at the end of the number for easy entry.", "Max File Size", "500MB");
+            if (Shared.ValidateMaxCacheSize(box))
+            {
+                MessageBox.Show("Settings will take place on restart of application", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Shared.AddUpdateAppSettings(Shared.cMaxCacheSize, box);
+                ((ToolStripMenuItem)sender).Text = string.Format(Shared.cFormatCacheSizeMenu, box);
+
+            }
+
+            else { MessageBox.Show("Value was incorrect, please try again", "Invalid", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+        #endregion
+
+        #region "Functions and Methods"
+
+        /// <summary>
+        /// On the Clipboard event, this function puts the clip object into the CacheHandler List
+        /// </summary>
+        /// <param name="obj"></param>
         private void AddItemToCache(IDataObject obj)
         {
-            ActiveKey = string.Empty;
             string[] ActiveCache = (from Ca in CacheHandler select Ca.Key).ToArray();
             ClipDataObject dataObject = new ClipDataObject(obj, ActiveCache);
             if (!string.IsNullOrEmpty(dataObject.Key))
@@ -121,100 +208,54 @@ namespace Clipboard
             }
         }
 
-        private ToolStripItem[] CachedItems()
+        /// <summary>
+        /// On Application Load, this method refreshes the global app settings
+        /// </summary>
+        private void LoadSettings()
         {
-            List<ToolStripMenuItem> output = new List<ToolStripMenuItem>();
-
-            foreach (var item in CacheHandler)
-            {
-                //item.Label.Click += ItemClickEvent;
-                if(item.Label.DropDownItems.Count > 0)
-                {
-                    item.Label.DropDownItems[0].Click -= ItemClickEvent;
-                    item.Label.DropDownItems[0].Click += ItemClickEvent;
-                    item.Label.DropDownItems[1].Click -= ItemSaveClickEvent;
-                    item.Label.DropDownItems[1].Click += ItemSaveClickEvent;
-                }
-                //item.Label.Click -= ItemClickEvent;
-                //item.Label.Click += ItemClickEvent;
-
-                output.Add(item.Label);
-            }
-            if (output.Count > 0) { return output.ToArray(); }
-            return null;
+            Boolean.TryParse(Shared.cExitCaching, out _saveOnExit);
+            Boolean.TryParse(Shared.ReadAppSetting(Shared.cUseSaveEncryption), out _useEncryption);
+            if (!int.TryParse(Shared.ReadAppSetting(Shared.cNumberOfSupportedCaches), out _totalCount) || _totalCount > 10 || _totalCount < 0) { _totalCount = 9; }
         }
 
-        private void ItemSaveClickEvent(object sender, EventArgs e)
-        {
-            var X = (from y in CacheHandler
-                     where y.Key == ((ToolStripLabel)sender).Name.Substring(4)
-                     select y).First();
-            System.Windows.Forms.Clipboard.Clear();
-            SaveAsObject saveAsObject = new SaveAsObject(X.ClipboardObject());
-        }
-
-        private void ItemClickEvent(object sender, EventArgs e)
-        {
-                 Manager.Stop();
-
-            var X = (from y in CacheHandler
-                     where y.Key == ((ToolStripLabel)sender).Name
-                         select y).First();
-                System.Windows.Forms.Clipboard.Clear();
-                System.Windows.Forms.Clipboard.SetDataObject(X.ClipboardObject());
-                Manager.Start();
-        }
-
-
-        public void MenuSettingsUpdateLocation(object sender, EventArgs e) { }
-
-        public void MenuSettingsUpdateDayImages(object sender, EventArgs e) { }
-
-        public void MenuSettingsUpdateNightImages(object sender, EventArgs e) { }
-
-
-        private void MenuExitClick(object sender, EventArgs e) { Application.Exit(); }
-
-        private void MenuAboutClick(object sender, EventArgs e)
-        {
-            string Name = this.GetType().Assembly.GetName().Name;
-
-            System.Text.StringBuilder message = new System.Text.StringBuilder();
-            var CustomDescriptionAttributes = this.GetType().Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyDescriptionAttribute), false);
-            if (CustomDescriptionAttributes.Length > 0) { message.Append(((System.Reflection.AssemblyDescriptionAttribute)CustomDescriptionAttributes[0]).Description).Append(Environment.NewLine); }
-            message.Append(Environment.NewLine);
-            message.Append("Version: ").Append(this.GetType().Assembly.GetName().Version.ToString()).Append(Environment.NewLine);
-            var CustomInfoCopyrightCall = this.GetType().Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCopyrightAttribute), false);
-            if (CustomInfoCopyrightCall.Length > 0) { message.Append("Copyright: ").Append(((System.Reflection.AssemblyCopyrightAttribute)CustomInfoCopyrightCall[0]).Copyright).Append(Environment.NewLine); }
-            message.Append(Environment.NewLine);
-            MessageBox.Show(message.ToString(), Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        #endregion
-
-        #region "Functions and Methods"
-
+        /// <summary>
+        /// On Load, call to attempt to load from disk
+        /// </summary>
         private void LoadCacheItemsFromDisk()
         {
-            try {
+            try
+            {
 
                 if (Shared.ExitCaching())
                 {
                     using (System.IO.MemoryStream MS = new System.IO.MemoryStream(System.IO.File.ReadAllBytes("cache.mp")))
                     {
                         if (CacheHandler == null) { CacheHandler = new List<ClipDataObject>(); }
-                        var X = MsgPack.Serialization.MessagePackSerializer.Get<List<SerializableClipObject>>();
-                        var Y = X.Unpack(MS);
+                        var msgPackSerializer = MsgPack.Serialization.MessagePackSerializer.Get<List<SerializableClipObject>>();
 
-                        foreach (var item in Y)
+                        List<SerializableClipObject> DeSerializedObject;
+                        if (UseEncryption) {
+                            using (System.IO.MemoryStream UnEncrypted = new System.IO.MemoryStream(Shared.DecryptClipObject(MS.ToArray())))
+                            {
+                                DeSerializedObject = msgPackSerializer.Unpack(UnEncrypted);
+                            }
+
+                        }
+                        else { DeSerializedObject = msgPackSerializer.Unpack(MS); }
+                        foreach (var item in DeSerializedObject)
                         {
                             CacheHandler.Add(new ClipDataObject(item));
                         }
                     }
                 }
 
-            }catch{ }
+            }
+            catch { }
         }
 
+        /// <summary>
+        /// On Exit,attempt to save to cache file
+        /// </summary>
         public void SaveCacheItemsToDisk()
         {
             try
@@ -238,7 +279,9 @@ namespace Clipboard
 
                         var X = MsgPack.Serialization.MessagePackSerializer.Get<List<SerializableClipObject>>();
                         X.Pack(MS, SaveObject);
-                        System.IO.File.WriteAllBytes("Cache.mp", MS.ToArray());
+                        if (UseEncryption)
+                        { System.IO.File.WriteAllBytes("Cache.mp", Shared.EncryptClipObject(MS.ToArray())); }
+                        else { System.IO.File.WriteAllBytes("Cache.mp", MS.ToArray()); }                      
                     }
                 }
             }
@@ -246,14 +289,96 @@ namespace Clipboard
 
         }
 
-
-
         #endregion
 
         #region "Menu Construction"
 
+        /// <summary>
+        /// Build Base Menu
+        /// </summary>
+        /// <returns></returns>
+        public ContextMenuStrip ConstructContextMenu()
+        {
+            ContextMenuStrip value = new ContextMenuStrip();
+            ToolStripItem[] items = CachedItems();
+            if (items != null) { value.Items.AddRange(items); }
+            value.Items.Add(new ToolStripSeparator());
 
+            if (items != null)
+            {
+                value.Items.Add(new ToolStripSeparator());
+            }
+            value.Items.Add(SettingsMenu());
+            value.Items.Add(new ToolStripLabel("About", null, false, MenuAboutClick));
+            value.Items.Add(new ToolStripLabel("Exit", null, false, MenuExitClick));
+            return value;
+        }
 
+        /// <summary>
+        /// Handles construction of the Settings Menu
+        /// </summary>
+        /// <returns></returns>
+        private ToolStripMenuItem SettingsMenu()
+        {
+            ToolStripMenuItem SettingsMenuItem = new ToolStripMenuItem() { Text = "Settings" };
+
+            ToolStripButton PauseResume = new ToolStripButton("Pause", null, PauseResume_ClickEvent);
+            SettingsMenuItem.DropDownItems.Add(PauseResume);
+
+            ToolStripLabel Clear = new ToolStripLabel("Clear Items");
+            Clear.Click += ClearClickEvent;
+            SettingsMenuItem.DropDownItems.Add(Clear);
+
+            SettingsMenuItem.DropDownItems.Add(new ToolStripSeparator());
+
+            ToolStripMenuItem save = new ToolStripMenuItem("Save Cache On Exit") { Checked = Shared.ExitCaching() };
+            save.Click += SaveOnExitClickEvent;
+            SettingsMenuItem.DropDownItems.Add(save);
+
+            ToolStripMenuItem Encrpyt = new ToolStripMenuItem("Encrpyt Saved Items") { Checked = UseEncryption };
+            Encrpyt.Click += EncryptClickEvent;
+            SettingsMenuItem.DropDownItems.Add(Encrpyt);
+
+            SettingsMenuItem.DropDownItems.Add(new ToolStripSeparator());
+
+            ToolStripMenuItem setCacheSize = new ToolStripMenuItem(string.Format(Shared.cFormatCacheSizeMenu, Shared.MaxCacheSize().ToString()));
+            setCacheSize.Click += UpdateMaxCacheSize;
+            SettingsMenuItem.DropDownItems.Add(setCacheSize);
+
+            ToolStripMenuItem setFileSize = new ToolStripMenuItem(string.Format(Shared.cFormatFileSizeMenu, Shared.MaxFileSize().ToString()));
+            setFileSize.Click += UpdateMaxFileSize;
+            SettingsMenuItem.DropDownItems.Add(setFileSize);
+
+            return SettingsMenuItem;
+
+        }
+
+        /// <summary>
+        /// Handles the construction of the Cached Items menu
+        /// </summary>
+        /// <returns></returns>
+        private ToolStripItem[] CachedItems()
+        {
+            List<ToolStripMenuItem> output = new List<ToolStripMenuItem>();
+
+            foreach (var item in CacheHandler)
+            {
+                //item.Label.Click += ItemClickEvent;
+                if (item.Label.DropDownItems.Count > 0)
+                {
+                    item.Label.DropDownItems[0].Click -= ItemClickEvent;
+                    item.Label.DropDownItems[0].Click += ItemClickEvent;
+                    item.Label.DropDownItems[1].Click -= ItemSaveClickEvent;
+                    item.Label.DropDownItems[1].Click += ItemSaveClickEvent;
+                }
+                //item.Label.Click -= ItemClickEvent;
+                //item.Label.Click += ItemClickEvent;
+
+                output.Add(item.Label);
+            }
+            if (output.Count > 0) { return output.ToArray(); }
+            return null;
+        }
 
         #endregion
 
@@ -275,8 +400,6 @@ namespace Clipboard
         void IDisposable.Dispose() { Dispose(true); }
         #endregion
 
-
-
         #region Main - Program entry point
         /// <summary>Program entry point.</summary>
         /// <param name="args">Command Line Arguments</param>
@@ -297,7 +420,7 @@ namespace Clipboard
                         MainApp notificationIcon = new MainApp();
                         notificationIcon.notifyIcon.Visible = true;
                         GC.Collect();
-                     Application.Run();
+                        Application.Run();
                         notificationIcon.SaveCacheItemsToDisk();
                         notificationIcon.notifyIcon.Dispose();
                     }

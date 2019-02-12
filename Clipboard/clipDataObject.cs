@@ -15,12 +15,6 @@ namespace Clipboard
         private Dictionary<string, byte[]> extractedItems = new Dictionary<string, byte[]>();
         private Dictionary<string, string> ExtractedTypeLookupTable = new Dictionary<string, string>();
         private Dictionary<string, Shared.DataType> CompresionTypeLookup = new Dictionary<string, Shared.DataType>();
-
-
-
-        #endregion
-
-        #region Enums
         #endregion
 
         #region Properties
@@ -113,6 +107,7 @@ namespace Clipboard
             {
                 CompresionTypeLookup.Add(item.Key, (Shared.DataType)item.Value);
             }
+            Key = fromOjbect.Key;
             Label = GenerateLabel(ClipboardObject());
         }
         #endregion
@@ -274,6 +269,7 @@ namespace Clipboard
             }
             response.ExtractedItems = extractedItems;
             response.ExtractedTypeLookupTable = ExtractedTypeLookupTable;
+            response.Key = Key;
             return response;
         }
 
@@ -310,9 +306,6 @@ namespace Clipboard
         /// <returns></returns>
         private ToolStripMenuItem GenerateLabel(DataObject obj)
         {
-            //ToolStripLabel CopyButton = new ToolStripLabel("Copy") { Name = Key };
-            //ToolStripLabel SaveButton = new ToolStripLabel("Save") { Name = "Save" + Key  };
-            
             ToolStripMenuItem item = new ToolStripMenuItem() { Name = Key };
             item.DropDown.Items.Add(new ToolStripLabel("Copy") { Name = Key });
             item.DropDown.Items.Add(new ToolStripLabel("Save") { Name = "Save" + Key });
@@ -322,7 +315,6 @@ namespace Clipboard
                 string Val = obj.GetText().Replace(Environment.NewLine, string.Empty);
                 if (Val.Length > 120) { Val = Val.Substring(0, 120); }
                 item.Text = Val;
-                //    return new ToolStripMenuItem(Val, null){Name = Key};
             }
             else if (obj.ContainsImage())
             {
@@ -330,7 +322,6 @@ namespace Clipboard
                 System.Drawing.Image thumb = obj.GetImage().GetThumbnailImage(16, 16, () => false, IntPtr.Zero);
                 item.Image = thumb;
                 item.Text = "Image " + DateTime.Now.ToString("hhMMss");
-                //return new ToolStripMenuItem("Image " + DateTime.Now.ToString("hhMMss"), thumb) { Name = Key }; 
             }
             else
             {
@@ -367,13 +358,6 @@ namespace Clipboard
         }
         #endregion
 
-    }
 
-    [Serializable]
-    public class SerializableClipObject
-    {
-        public Dictionary<string, byte[]> ExtractedItems { get; set; }
-        public Dictionary<string, string> ExtractedTypeLookupTable { get; set; }
-        public Dictionary<string, byte> CompresionTypeLookup { get; set; }
     }
 }
