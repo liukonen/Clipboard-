@@ -11,14 +11,14 @@ reason: I wanted an application that I could use that kept an in memory cache of
 ## future enhancements
 * ~~Be able to save clipped items~~
 * ~~store / retrieve clip items on drive for reboots~~
-  * ~~cryptography on stored items
+  * ~~cryptography on stored items~~
 * ~~In memory compression on text items~~
 * ~~potential compression on images... need to research what is actually saved on clip~~
-* ~~options form, to configure compression, max number of items, and cryptography
-* ~~pre defined hotkeys for cached items
-* ~~Lock particular cache items to list
+* ~~options form, to configure compression, max number of items, and cryptography~~
+* ~~pre defined hotkeys for cached items~~
+* ~~Lock particular cache items to list~~
 * ~~prevent duplicate items from being in memory~~ - Note: would still like to research format17/dib/Bitmap compression more
-* ~~better about me screen
+* ~~better about me screen~~
 * winform with better display of cache items (optional)
   * Drag and drop support
   * Save support
