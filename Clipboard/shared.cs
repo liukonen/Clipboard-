@@ -151,7 +151,7 @@ namespace Clipboard
             {DataFormats.UnicodeText, SaveAsType.txt },
             {"PNG", SaveAsType.png2 }
         };
-        private static Dictionary<SaveAsExtentions, string> extentionName = new Dictionary<SaveAsExtentions, string>()
+        private static readonly Dictionary<SaveAsExtentions, string> extentionName = new Dictionary<SaveAsExtentions, string>()
         {
             { SaveAsExtentions.bmp, "Bitmap Image"},
             //{SaveAsExtentions.csv, "Comma Seperated Value" },
@@ -173,7 +173,7 @@ namespace Clipboard
             new Tuple<SaveAsType, SaveAsExtentions>(SaveAsType.html, SaveAsExtentions.html)
         };
 
-        private static Dictionary<SaveAsType, string> typeFormats = new Dictionary<SaveAsType, string>()
+        private static readonly Dictionary<SaveAsType, string> typeFormats = new Dictionary<SaveAsType, string>()
         {
             {SaveAsType.img, "JPEG Image (*.jpg)|*.jpg|Portable Network Graphics Image (*.png)|*.png|Bitmap Image (*.bmp)|*.bmp" },
             {SaveAsType.html, "html page (*.html)|*.html" },

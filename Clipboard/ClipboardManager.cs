@@ -16,7 +16,7 @@ namespace Clipboard
 
         public ClipboardManager()
         {
-            ClipboardViewer = (IntPtr)SetClipboardViewer((int)this.Handle);
+            ClipboardViewer = (IntPtr)NativeMethods.SetClipboardViewer((int)this.Handle);
         }
 
         public event EventHandler<ClipboardChangedEventArgs> ClipboardChanged;
@@ -25,15 +25,6 @@ namespace Clipboard
         #region Low Level control Items
 
         IntPtr ClipboardViewer;
-
-        [DllImport("User32.dll")]
-        protected static extern int SetClipboardViewer(int hWndNewViewer);
-
-        [DllImport("User32.dll", CharSet = CharSet.Auto)]
-        public static extern bool ChangeClipboard(IntPtr hWndRemove, IntPtr hWndNewNext);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern int SendMessage(IntPtr hwnd, int wMsg, IntPtr wParam, IntPtr lParam);
 
         /// <summary>
         /// The WndProc is the function you write to receive all input directed at your window. 
@@ -51,14 +42,14 @@ namespace Clipboard
             {
                 case cDrawClipboard:
                     if (onOffSwitch) { OnClipboardChanged(); }
-                    SendMessage(ClipboardViewer, m.Msg, m.WParam, m.LParam);
+                    NativeMethods.SendMessage(ClipboardViewer, m.Msg, m.WParam, m.LParam);
                     break;
 
                 case cChangeCBChain:
                     if (m.WParam == ClipboardViewer)
                         ClipboardViewer = m.LParam;
                     else
-                        SendMessage(ClipboardViewer, m.Msg, m.WParam, m.LParam);
+                        NativeMethods.SendMessage(ClipboardViewer, m.Msg, m.WParam, m.LParam);
                     break;
 
                 default:
@@ -76,7 +67,7 @@ namespace Clipboard
         {
             try
             {
-                ChangeClipboard(this.Handle, ClipboardViewer);
+                NativeMethods.ChangeClipboardChain(this.Handle, ClipboardViewer);
             }
             catch { }
         }

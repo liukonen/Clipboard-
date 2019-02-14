@@ -389,6 +389,7 @@ namespace Clipboard
         {
             if (!disposedValue)
             {
+                Manager.Dispose();
                 if (disposing)
                 {
                     disposedValue = true;
@@ -397,7 +398,7 @@ namespace Clipboard
         }
 
         // This code added to correctly implement the disposable pattern.
-        void IDisposable.Dispose() { Dispose(true); }
+        public void Dispose() { Dispose(true); }
         #endregion
 
         #region Main - Program entry point

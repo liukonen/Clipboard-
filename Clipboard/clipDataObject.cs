@@ -144,36 +144,48 @@ namespace Clipboard
 
         #region Compressions
         #region Compress
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
         private static byte[] CompressString(string stringToCompress)
         {
-
-            using (MemoryStream streamToCompressTo = new MemoryStream())
+            using (MemoryStream ms = new MemoryStream())
             {
-                using (DeflateStream compressor = new DeflateStream(streamToCompressTo, CompressionMode.Compress))
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(ms))
                 {
-                    using (System.IO.StreamWriter writer = new System.IO.StreamWriter(compressor))
-                    {
-                        writer.Write(stringToCompress);
-                        writer.Flush();
-                    }
-
+                    writer.Write(stringToCompress);
+                    writer.Flush();
+                    return CompressStream(ms);
                 }
-                return streamToCompressTo.ToArray();
             }
         }
 
-        private static byte[] CompressStream(MemoryStream StreamToCompress)
+
+
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
+        private static byte[] CompressStream(Stream StreamToCompress)
         {
-            using (MemoryStream streamToCompressTo = new MemoryStream())
+            byte[] value;
+            MemoryStream ms = null;
+            try
             {
-                using (DeflateStream compressor = new DeflateStream(streamToCompressTo, CompressionMode.Compress))
+                ms = new MemoryStream();
+                using (DeflateStream compressor = new DeflateStream(ms, CompressionMode.Compress))
                 {
                     StreamToCompress.CopyTo(compressor);
+                    StreamToCompress.Flush();
                 }
-                return streamToCompressTo.ToArray();
+                value = ms.ToArray();
+
             }
+            finally
+            {
+                if (ms != null) { ms.Dispose(); }
+            }
+            return value;
         }
 
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2202:Do not dispose objects multiple times")]
         private static byte[] CompressObject(object o)
         {
             using (MemoryStream compressedItem = new MemoryStream())
